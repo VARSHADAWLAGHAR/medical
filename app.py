@@ -1,5 +1,5 @@
 import streamlit as st
-from transformers import AutoProcessor, AutoModelForVision2Seq
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 from PIL import Image
 import torch
 import re
@@ -10,12 +10,12 @@ st.title("💊 AI Medical Prescription Verification")
 st.write("Upload a handwritten prescription. The AI will extract text, identify medicines, and check dose safety.")
 
 # -----------------------------
-# LOAD STRONG HUGGING FACE MODEL
+# LOAD TROCR OCR MODEL
 # -----------------------------
 @st.cache_resource
 def load_ocr_model():
-    processor = AutoProcessor.from_pretrained("google/pix2text-large-handwriting")
-    model = AutoModelForVision2Seq.from_pretrained("google/pix2text-large-handwriting")
+    processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
+    model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-large-handwritten")
     return processor, model
 
 processor, model = load_ocr_model()
@@ -41,7 +41,6 @@ def extract_medicines(text):
     return meds_found
 
 def extract_dose(text):
-    # Find numbers like 250mg, 500mg, 1g
     dose_match = re.findall(r'(\d+)\s*mg', text.lower())
     doses = [int(d) for d in dose_match]
     return doses if doses else None
@@ -65,10 +64,9 @@ def check_safety(meds_found, doses):
 # OCR FUNCTION
 # -----------------------------
 def run_ocr(image):
-    inputs = processor(image, return_tensors="pt")
-    with torch.no_grad():
-        generated = model.generate(**inputs)
-    text = processor.batch_decode(generated, skip_special_tokens=True)[0]
+    pixel_values = processor(image, return_tensors="pt").pixel_values
+    generated_ids = model.generate(pixel_values)
+    text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
     return text
 
 # -----------------------------
@@ -80,7 +78,7 @@ if uploaded:
     image = Image.open(uploaded)
     st.image(image, caption="📸 Uploaded Prescription", use_column_width=True)
 
-    st.write("🔍 Extracting text from prescription... please wait 5–10 sec.")
+    st.write("🔍 Extracting text from prescription...")
 
     extracted_text = run_ocr(image)
 
